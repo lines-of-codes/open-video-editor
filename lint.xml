@@ -3,4 +3,5 @@
     <issue id="UnsafeOptInUsageError">
         <option name="opt-in" value="androidx.media3.common.util.UnstableApi" />
     </issue>
+    <issue id="MissingTranslation" severity="warning" />
 </lint>

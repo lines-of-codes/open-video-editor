@@ -1,11 +1,58 @@
 # Open Video Editor
-<img src="./metadata/en-US/images/featureGraphicDark.png" alt="Feature graphic" width="500">
 
-## Install
-[<img src="./assets/get-it-on-github.png" alt='Get it on GitHub' height="80">](https://github.com/devhyper/open-video-editor/releases/latest)
-[<img src="./assets/IzzyOnDroid.png" alt='Get it on IzzyOnDroid' height="80">](https://apt.izzysoft.de/fdroid/index/apk/io.github.devhyper.openvideoeditor)
-[<img src="./assets/google-play-badge.png" alt='Get it on Google Play' height="80">](https://play.google.com/store/apps/details?id=io.github.devhyper.openvideoeditor)
-[<img src="./assets/get-it-on-fdroid.png" alt='Get it on F-Droid' height="80">](https://f-droid.org/en/packages/io.github.devhyper.openvideoeditor)
+A fork of [Open Video Editor](https://github.com/devhyper/open-video-editor)
+
+This fork intends to keep the app up-to-date and fix bugs, however big shiny 
+features likely aren't going to be added (by me, others are welcome to add it)
+
+## Build Instructions
+
+These are instructions to make a debug build, your biggest obstacle will be 
+building FFmpeg. These instructions also assume you have basic command-line
+knowledge.
+
+First, Clone (or download) this repository
+
+```sh
+git clone https://github.com/lines-of-codes/open-video-editor
+```
+
+### FFmpegKitNext
+
+Download and extract the latest version of FFmpegKitNext from 
+[GitHub Releases](https://github.com/arthenica/ffmpeg-kit-next/releases/latest)
+(or clone the repository and do a checkout), make sure the folder is named `ffmpeg-kit-next` and 
+placed as a sibling of this repository's folder. You can also create a symbolic link for this 
+purpose.
+
+Follow [FFmpegKitNext Android](https://github.com/arthenica/ffmpeg-kit-next/tree/main/android#readme)
+for the full and up-to-date instructions, but for the short version:
+
+It is recommended that you install Nix for this, then run:
+
+```sh
+./nix-android.sh -p android-r27d --enable-lib-android-media-codec --enable-lib-android-zlib
+```
+
+This builds FFmpeg with a minimal set of libraries with a preconfigured environment with Android NDK
+r27d. (Beware, This *will* use a large amount of storage)
+
+If you did not listen to the instructions above and named the FFmpegKitNext folder something else or
+the location of the maven repository changed in the future, you can change the location in the 
+`settings.gradle.kts` file.
+
+FFmpeg is only used for the "Lossless cut" feature, which I'm guessing is for exporting trims with 
+as minimal of a change in quality as possible.
+
+### Actually Building
+
+Going back to the root of this project, Run `./gradlew build`
+
+The APK will be available at `app/build/outputs/apk/debug/app-debug.apk`
+
+---
+
+Most of the original README below:
 
 ## Features
 - Trim
