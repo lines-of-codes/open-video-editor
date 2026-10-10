@@ -67,6 +67,7 @@ import com.godaddy.android.colorpicker.ClassicColorPicker
 import com.godaddy.android.colorpicker.HsvColor
 import io.github.devhyper.openvideoeditor.R
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -113,7 +114,7 @@ fun SwitchSetting(
 }
 
 @Composable
-fun TextfieldSetting(
+fun TextFieldSetting(
     name: String,
     keyboardType: KeyboardType = KeyboardType.Text,
     onValueChanged: (String) -> String
@@ -166,6 +167,49 @@ fun DropdownSetting(
                     onClick = {
                         expanded = false
                         selectedOptionText = selectionOption
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DropdownSetting(
+    name: String,
+    initialValue: String,
+    options: ImmutableMap<String, String>,
+    onSelectionChanged: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var selectedOptionText by remember { mutableStateOf(initialValue) }
+    val dropOptions = options.filterNot { it.key == selectedOptionText }
+    onSelectionChanged(options[selectedOptionText]!!)
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+    ) {
+        TextField(
+            modifier = Modifier.menuAnchor(),
+            readOnly = true,
+            value = selectedOptionText,
+            onValueChange = {},
+            label = { Text(name) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.textFieldColors(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            dropOptions.forEach { selectionOption ->
+                DropdownMenuItem(
+                    text = { Text(selectionOption.key) },
+                    onClick = {
+                        expanded = false
+                        selectedOptionText = selectionOption.key
                     },
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
@@ -482,6 +526,10 @@ fun ResizableRectangle(
         }
         .border(rectangleStroke.dp, rectangleColor)
     ) {
+        Text(
+            "${width.roundToInt()}x${height.roundToInt()}",
+            Modifier.padding(12.dp, 8.dp)
+        )
         Box(
             modifier = Modifier
                 .size(circleSize.dp)

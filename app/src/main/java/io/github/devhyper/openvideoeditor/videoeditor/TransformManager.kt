@@ -8,23 +8,29 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.activity.result.ActivityResultLauncher
+import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.net.toUri
+import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.ClippingConfiguration
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.SpeedProvider
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.SpeedChangeEffect
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.transformer.Composition
 import androidx.media3.transformer.Composition.HDR_MODE_EXPERIMENTAL_FORCE_INTERPRET_HDR_AS_SDR
 import androidx.media3.transformer.Composition.HDR_MODE_KEEP_HDR
 import androidx.media3.transformer.Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC
 import androidx.media3.transformer.Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.TransformationRequest
@@ -37,8 +43,12 @@ import com.arthenica.ffmpegkit.SessionState
 import io.github.devhyper.openvideoeditor.misc.PROJECT_FILE_EXT
 import io.github.devhyper.openvideoeditor.misc.getFileNameFromUri
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
@@ -91,6 +101,7 @@ class ExportSettings {
         }
     }
 
+    @OptIn(ExperimentalApi::class)
     fun setHdrModeString(string: String) {
         when (string) {
             "Keep HDR" -> {
@@ -141,23 +152,26 @@ fun getHdrModesStrings(): ImmutableList<String> {
     )
 }
 
-fun getAudioMimeTypesStrings(): ImmutableList<String> {
-    return persistentListOf(
-        "Original",
-        MimeTypes.AUDIO_AAC,
-        MimeTypes.AUDIO_AMR_NB,
-        MimeTypes.AUDIO_AMR_WB
+fun getAudioMimeTypesStrings(): ImmutableMap<String, String> {
+    return persistentMapOf(
+        "Original" to "Original",
+        "AAC" to MimeTypes.AUDIO_AAC,
+        "AMR-NB" to MimeTypes.AUDIO_AMR_NB,
+        "AMR-WB" to MimeTypes.AUDIO_AMR_WB
     )
 }
 
-fun getVideoMimeTypesStrings(): ImmutableList<String> {
-    return persistentListOf(
-        "Original",
-        MimeTypes.VIDEO_H263,
-        MimeTypes.VIDEO_H264,
-        MimeTypes.VIDEO_H265,
-        MimeTypes.VIDEO_MP4V
+fun getVideoMimeTypesStrings(): ImmutableMap<String, String> {
+    val list = mutableMapOf(
+        "Original" to "Original",
+        "H.263" to MimeTypes.VIDEO_H263,
+        "H.264" to MimeTypes.VIDEO_H264,
+        "H.265" to MimeTypes.VIDEO_H265
     )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        list["AV1"] = MimeTypes.VIDEO_AV1
+    }
+    return list.toPersistentMap()
 }
 
 class DialogUserEffect(
@@ -218,6 +232,13 @@ data class ProjectData(
             output.close()
         }
     }
+}
+
+class ConstantSpeedProvider(val speed: Float) : SpeedProvider {
+    override fun getSpeed(timeUs: Long): Float = speed
+
+    override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
+
 }
 
 class TransformManager {
@@ -458,33 +479,42 @@ class TransformManager {
                 )?.fileDescriptor
             val effectArray = getEffectArray()
             effectArray.apply {
-                if (exportSettings.speed > 0) {
-                    add(SpeedChangeEffect(exportSettings.speed))
-                }
                 if (exportSettings.framerate > 0) {
                     add(FrameDropEffect.createDefaultFrameDropEffect(exportSettings.framerate))
                 }
             }
-            val editedMediaItem = EditedMediaItem.Builder(trimmedMedia)
+            val editedMediaItemBuilder = EditedMediaItem.Builder(trimmedMedia)
                 .setEffects(Effects(projectData.audioProcessors, effectArray))
                 .setRemoveAudio(!exportSettings.exportAudio)
                 .setRemoveVideo(!exportSettings.exportVideo)
-                .build()
-            transformer = Transformer.Builder(context)
-                .setTransformationRequest(
-                    TransformationRequest.Builder()
-                        .setHdrMode(exportSettings.hdrMode)
-                        .setAudioMimeType(exportSettings.audioMimeType)
-                        .setVideoMimeType(exportSettings.videoMimeType)
-                        .build()
-                )
+
+            if (exportSettings.speed > 0) {
+                editedMediaItemBuilder.setSpeed(ConstantSpeedProvider(exportSettings.speed))
+            }
+
+            val editedMediaItem = editedMediaItemBuilder.build()
+            val composition = Composition.Builder(
+                EditedMediaItemSequence
+                    .withAudioAndVideoFrom(listOf(editedMediaItem))
+            )
+                .setHdrMode(exportSettings.hdrMode).build()
+            val builder = Transformer.Builder(context)
                 .setMuxerFactory(CustomMuxer.Factory(fd))
                 .addListener(transformerListener)
-                .build()
+
+            if (exportSettings.audioMimeType != null) {
+                builder.setAudioMimeType(exportSettings.audioMimeType!!)
+            }
+
+            if (exportSettings.videoMimeType != null) {
+                builder.setVideoMimeType(exportSettings.videoMimeType!!);
+            }
+
+            transformer = builder.build()
             if (fd != null) {
-                transformer!!.start(editedMediaItem, "")
+                transformer!!.start(composition, "")
             } else {
-                transformer!!.start(editedMediaItem, outputPath)
+                transformer!!.start(composition, outputPath)
             }
         }
     }
@@ -497,8 +527,8 @@ class TransformManager {
     fun getProgress(): Float {
         val ffmpegSessions = FFmpegKit.listSessions()
         return if (ffmpegSessions.isNotEmpty()) {
-            val sessionState = ffmpegSessions.last().state
-            return when (sessionState) {
+            val sessionState = ffmpegSessions.last().getState()
+            when (sessionState) {
                 SessionState.COMPLETED -> 1F
                 SessionState.RUNNING -> 0.5F
                 SessionState.CREATED -> 0F

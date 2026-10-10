@@ -29,7 +29,7 @@ import androidx.compose.ui.text.font.toFontFamily
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.media3.effect.Crop
-import androidx.media3.effect.OverlaySettings
+import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
 import io.github.devhyper.openvideoeditor.R
 import io.github.devhyper.openvideoeditor.misc.ColorPickerSetting
@@ -37,7 +37,7 @@ import io.github.devhyper.openvideoeditor.misc.CompatTypefaceSpan
 import io.github.devhyper.openvideoeditor.misc.FontPickerSetting
 import io.github.devhyper.openvideoeditor.misc.ListDialog
 import io.github.devhyper.openvideoeditor.misc.ResizableRectangle
-import io.github.devhyper.openvideoeditor.misc.TextfieldSetting
+import io.github.devhyper.openvideoeditor.misc.TextFieldSetting
 import io.github.devhyper.openvideoeditor.misc.screenToNdc
 import io.github.devhyper.openvideoeditor.misc.setFullLengthSpan
 import io.github.devhyper.openvideoeditor.misc.spToPx
@@ -53,7 +53,7 @@ fun TextEditor(effectFlow: MutableStateFlow<EffectConstructor?>) {
         { offsetX: Float, offsetY: Float, textValue: String, videoWidth: Float, videoHeight: Float, textBackgroundColor: Color, textForegroundColor: Color, textSize: Int, textFontPath: String? ->
             effectFlow.update {
                 {
-                    val overlaySettings = OverlaySettings.Builder()
+                    val overlaySettings = StaticOverlaySettings.Builder()
                     val x = screenToNdc(offsetX, videoWidth)
                     val y = screenToNdc(offsetY, videoHeight)
                     overlaySettings.setOverlayFrameAnchor(1f, -1f)
@@ -96,7 +96,7 @@ fun TextEditor(effectFlow: MutableStateFlow<EffectConstructor?>) {
             }
         ) {
             item {
-                TextfieldSetting(
+                TextFieldSetting(
                     name = stringResource(R.string.size),
                     onValueChanged = {
                         val error = validateUIntAndNonzero(it)

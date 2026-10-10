@@ -15,13 +15,14 @@
  */
 package io.github.devhyper.openvideoeditor.videoeditor;
 
-import android.media.MediaCodec.BufferInfo;
-
+import androidx.annotation.NonNull;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.Metadata;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.muxer.Muxer;
+import androidx.media3.muxer.MuxerException;
+import androidx.media3.muxer.BufferInfo;
 
 import com.google.common.collect.ImmutableList;
 
@@ -59,11 +60,13 @@ public final class CustomMuxer implements Muxer {
             this.muxerFactory = new CustomFrameworkMuxer.Factory(fd, videoDurationMs);
         }
 
+        @NonNull
         @Override
-        public Muxer create(String path) throws MuxerException {
+        public Muxer create(@NonNull String path) throws MuxerException {
             return new CustomMuxer(muxerFactory.create(path));
         }
 
+        @NonNull
         @Override
         public ImmutableList<String> getSupportedSampleMimeTypes(@C.TrackType int trackType) {
             return muxerFactory.getSupportedSampleMimeTypes(trackType);
@@ -77,18 +80,18 @@ public final class CustomMuxer implements Muxer {
     }
 
     @Override
-    public TrackToken addTrack(Format format) throws MuxerException {
+    public int addTrack(@NonNull Format format) throws MuxerException {
         return muxer.addTrack(format);
     }
 
     @Override
-    public void writeSampleData(TrackToken trackToken, ByteBuffer byteBuffer, BufferInfo bufferInfo)
+    public void writeSampleData(int trackToken, @NonNull ByteBuffer byteBuffer, @NonNull BufferInfo bufferInfo)
             throws MuxerException {
         muxer.writeSampleData(trackToken, byteBuffer, bufferInfo);
     }
 
     @Override
-    public void addMetadataEntry(Metadata.Entry metadataEntry) {
+    public void addMetadataEntry(@NonNull Metadata.Entry metadataEntry) {
         muxer.addMetadataEntry(metadataEntry);
     }
 

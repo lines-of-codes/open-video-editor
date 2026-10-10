@@ -2,6 +2,7 @@ package io.github.devhyper.openvideoeditor.main
 
 import android.app.Activity
 import android.content.Intent
+import androidx.activity.compose.LocalActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,7 +41,7 @@ fun MainScreen(
     pickMedia: ActivityResultLauncher<PickVisualMediaRequest>,
     pickProject: ActivityResultLauncher<Array<String>>
 ) {
-    val activity = LocalContext.current as Activity
+    val activity = LocalActivity.current
     OpenVideoEditorTheme {
         Surface(
             modifier = Modifier
@@ -58,7 +59,7 @@ fun MainScreen(
                         actions = {
                             IconButton(onClick = {
                                 val intent = Intent(activity, SettingsActivity::class.java)
-                                activity.startActivity(intent)
+                                activity?.startActivity(intent)
                             }) {
                                 Icon(
                                     imageVector = Icons.Filled.Settings,

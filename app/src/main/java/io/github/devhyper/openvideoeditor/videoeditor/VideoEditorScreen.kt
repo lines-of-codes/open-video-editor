@@ -8,9 +8,9 @@ import android.os.Looper.getMainLooper
 import android.view.TextureView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.compose.LocalActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -89,6 +89,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -118,7 +119,7 @@ import io.github.devhyper.openvideoeditor.misc.PLAYER_SEEK_FORWARD_INCREMENT
 import io.github.devhyper.openvideoeditor.misc.PROJECT_FILE_EXT
 import io.github.devhyper.openvideoeditor.misc.REFRESH_RATE
 import io.github.devhyper.openvideoeditor.misc.SwitchSetting
-import io.github.devhyper.openvideoeditor.misc.TextfieldSetting
+import io.github.devhyper.openvideoeditor.misc.TextFieldSetting
 import io.github.devhyper.openvideoeditor.misc.formatMinSec
 import io.github.devhyper.openvideoeditor.misc.getFileNameFromUri
 import io.github.devhyper.openvideoeditor.misc.repeatingClickable
@@ -304,7 +305,7 @@ fun VideoEditorScreen(
                                         ViewGroup.LayoutParams.MATCH_PARENT
                                     )
                             }
-                            textureView!!
+                            textureView
                         }
                     )
 
@@ -378,7 +379,6 @@ fun VideoEditorScreen(
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
 @Composable
 private fun PlayerControls(
     modifier: Modifier = Modifier,
@@ -481,7 +481,7 @@ private fun TopControls(
     createDocument: ActivityResultLauncher<String>,
     createProject: ActivityResultLauncher<String>
 ) {
-    val activity = LocalContext.current as Activity
+    val activity = LocalActivity.current as Activity
     val viewModel = viewModel { VideoEditorViewModel() }
     val projectOutputPath by viewModel.projectOutputPath.collectAsState()
     val projectSavingSupported by viewModel.projectSavingSupported.collectAsState()
@@ -618,7 +618,7 @@ private fun BottomControls(
     onSeekChanged: (timeMs: Float) -> Unit,
     transformManager: TransformManager
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val filterSheetState = rememberModalBottomSheetState()
     val layerSheetState = rememberModalBottomSheetState()
@@ -832,7 +832,7 @@ private fun BottomControls(
             listItems = {
                 item {
                     Text("$videoTimeFrames/$durationFrames")
-                    TextfieldSetting(
+                    TextFieldSetting(
                         name = stringResource(R.string.new_frame),
                         keyboardType = KeyboardType.Number,
                         onValueChanged = {
@@ -843,7 +843,7 @@ private fun BottomControls(
                                     newFrame = newLongFrame
                                 } else {
                                     newFrame = -1L
-                                    return@TextfieldSetting context.getString(R.string.input_frame_must_less_or_equal) + " $durationFrames"
+                                    return@TextFieldSetting resources.getString(R.string.input_frame_must_less_or_equal) + " $durationFrames"
                                 }
                             }
                             errorTxt
@@ -1092,7 +1092,7 @@ private fun FilterDialog(
             val dropdown = arg.dropdownOptions
             if (textfield != null) {
                 item {
-                    TextfieldSetting(
+                    TextFieldSetting(
                         name = stringResource(arg.stringResId),
                         onValueChanged = {
                             val error = textfield(it)
@@ -1142,6 +1142,7 @@ private fun ExportDialog(
         return
     }
     val context = LocalContext.current
+    val resources = LocalResources.current
     val exportSettings: ExportSettings by remember { mutableStateOf(ExportSettings()) }
     var exportString: String? by remember { mutableStateOf(null) }
     var infoDialogText by remember { mutableStateOf("") }
@@ -1163,7 +1164,7 @@ private fun ExportDialog(
                     }
                 }
             val onFFmpegError: () -> Unit = {
-                exportString = context.getString(R.string.ffmpeg_error)
+                exportString = resources.getString(R.string.ffmpeg_error)
             }
             transformManager.export(
                 context,
@@ -1181,7 +1182,7 @@ private fun ExportDialog(
             onDismissRequest = onDismissRequest,
             onAcceptRequest = {
                 val dotIndex: Int = title.lastIndexOf('.')
-                val fileName: String = title.substring(0, dotIndex)
+                val fileName: String = title.substring(0, dotIndex) + ".mp4"
                 createDocument.launch(fileName)
             },
         ) {
@@ -1204,6 +1205,7 @@ private fun ExportDialog(
             item {
                 DropdownSetting(
                     name = stringResource(R.string.audio_type),
+                    initialValue = "Original",
                     options = getAudioMimeTypesStrings()
                 ) {
                     exportSettings.setAudioMimeTypeString(it)
@@ -1212,13 +1214,14 @@ private fun ExportDialog(
             item {
                 DropdownSetting(
                     name = stringResource(R.string.video_type),
+                    initialValue = "Original",
                     options = getVideoMimeTypesStrings()
                 ) {
                     exportSettings.setVideoMimeTypeString(it)
                 }
             }
             item {
-                TextfieldSetting(
+                TextFieldSetting(
                     name = stringResource(R.string.speed),
                     keyboardType = KeyboardType.Decimal
                 ) {
@@ -1232,7 +1235,7 @@ private fun ExportDialog(
                 }
             }
             item {
-                TextfieldSetting(
+                TextFieldSetting(
                     name = stringResource(R.string.framerate),
                     keyboardType = KeyboardType.Decimal
                 ) {
@@ -1243,7 +1246,7 @@ private fun ExportDialog(
                             transformManager.player.videoFormat?.frameRate
                         if (originalFramerate != null && framerate >= originalFramerate) {
                             errorMsg =
-                                context.getString(R.string.framerate_must_lower) + "($originalFramerate)."
+                                resources.getString(R.string.framerate_must_lower) + "($originalFramerate)."
                         } else {
                             exportSettings.framerate = framerate
                         }
@@ -1262,7 +1265,7 @@ private fun ExportDialog(
                     exportSettings.losslessCut = it
                     if (it) {
                         infoDialogText =
-                            context.getString(R.string.enabling_lossless_cut_will_only_export_trims)
+                            resources.getString(R.string.enabling_lossless_cut_will_only_export_trims)
                     }
                 }
             }

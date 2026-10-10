@@ -15,17 +15,18 @@
  */
 package io.github.devhyper.openvideoeditor.videoeditor;
 
-import static androidx.media3.common.util.Assertions.checkNotNull;
-import static androidx.media3.common.util.Assertions.checkState;
-import static androidx.media3.common.util.Util.SDK_INT;
 import static androidx.media3.common.util.Util.castNonNull;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import android.annotation.SuppressLint;
-import android.media.MediaCodec.BufferInfo;
+import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
+import android.os.Build;
 import android.system.ErrnoException;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
@@ -34,8 +35,11 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.MediaFormatUtil;
 import androidx.media3.common.util.Util;
 import androidx.media3.container.Mp4LocationData;
+import androidx.media3.muxer.BufferInfo;
 import androidx.media3.muxer.Muxer;
+import androidx.media3.muxer.MuxerException;
 import androidx.media3.transformer.TransformerUtil;
+import androidx.media3.muxer.MediaMuxerCompat;
 
 import com.google.common.collect.ImmutableList;
 
@@ -47,9 +51,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * {@link Muxer} implementation that uses a {@link MediaMuxer}.
+ * {@link Muxer} implementation that uses a {@link MediaMuxerCompat}.
  */
-/* package */ final class CustomFrameworkMuxer implements Muxer {
+public final class CustomFrameworkMuxer implements Muxer {
     public static final String MUXER_STOPPING_FAILED_ERROR_MESSAGE = "Failed to stop the MediaMuxer";
 
     // MediaMuxer supported sample formats are documented in MediaMuxer.addTrack(MediaFormat).
@@ -74,15 +78,16 @@ import java.util.Map;
             this.fd = fd;
         }
 
+        @NonNull
         @Override
         public CustomFrameworkMuxer create(String path) throws MuxerException {
-            MediaMuxer mediaMuxer;
+            MediaMuxerCompat mediaMuxer;
             try {
                 if (path.isEmpty()) {
-                    mediaMuxer = new MediaMuxer(fd, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                    mediaMuxer = new MediaMuxerCompat(fd, MediaMuxerCompat.OUTPUT_FORMAT_MP4);
                     android.system.Os.close(fd);
                 } else {
-                    mediaMuxer = new MediaMuxer(path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                    mediaMuxer = new MediaMuxerCompat(path, MediaMuxerCompat.OUTPUT_FORMAT_MP4);
                 }
             } catch (IOException e) {
                 throw new MuxerException("Error creating muxer", e);
@@ -92,6 +97,7 @@ import java.util.Map;
             return new CustomFrameworkMuxer(mediaMuxer, videoDurationMs);
         }
 
+        @NonNull
         @Override
         public ImmutableList<String> getSupportedSampleMimeTypes(@C.TrackType int trackType) {
             if (trackType == C.TRACK_TYPE_VIDEO) {
@@ -103,18 +109,18 @@ import java.util.Map;
         }
     }
 
-    private final MediaMuxer mediaMuxer;
+    private final MediaMuxerCompat mediaMuxer;
     private final long videoDurationUs;
-    private final Map<TrackToken, Long> trackTokenToLastPresentationTimeUs;
-    private final Map<TrackToken, Long> trackTokenToPresentationTimeOffsetUs;
+    private final Map<Integer, Long> trackTokenToLastPresentationTimeUs;
+    private final Map<Integer, Long> trackTokenToPresentationTimeOffsetUs;
 
     @Nullable
-    private TrackToken videoTrackToken;
+    private Integer videoTrackToken;
 
     private boolean isStarted;
     private boolean isReleased;
 
-    private CustomFrameworkMuxer(MediaMuxer mediaMuxer, long videoDurationMs) {
+    private CustomFrameworkMuxer(MediaMuxerCompat mediaMuxer, long videoDurationMs) {
         this.mediaMuxer = mediaMuxer;
         this.videoDurationUs = Util.msToUs(videoDurationMs);
         trackTokenToLastPresentationTimeUs = new HashMap<>();
@@ -122,7 +128,7 @@ import java.util.Map;
     }
 
     @Override
-    public TrackToken addTrack(Format format) throws MuxerException {
+    public int addTrack(Format format) throws MuxerException {
         String sampleMimeType = checkNotNull(format.sampleMimeType);
         MediaFormat mediaFormat;
         boolean isVideo = MimeTypes.isVideo(sampleMimeType);
@@ -148,16 +154,15 @@ import java.util.Map;
             throw new MuxerException("Failed to add track with format=" + format, e);
         }
 
-        TrackToken trackToken = new TrackTokenImpl(trackIndex);
         if (isVideo) {
-            videoTrackToken = trackToken;
+            videoTrackToken = trackIndex;
         }
 
-        return trackToken;
+        return trackIndex;
     }
 
     @Override
-    public void writeSampleData(TrackToken trackToken, ByteBuffer data, BufferInfo bufferInfo)
+    public void writeSampleData(int trackToken, @NonNull ByteBuffer data, BufferInfo bufferInfo)
             throws MuxerException {
         long presentationTimeUs = bufferInfo.presentationTimeUs;
         if (videoDurationUs != C.TIME_UNSET
@@ -166,7 +171,7 @@ import java.util.Map;
             return;
         }
         if (!isStarted) {
-            if (Util.SDK_INT < 30 && presentationTimeUs < 0) {
+            if (Build.VERSION.SDK_INT < 30 && presentationTimeUs < 0) {
                 trackTokenToPresentationTimeOffsetUs.put(trackToken, -presentationTimeUs);
             }
             startMuxer();
@@ -184,7 +189,7 @@ import java.util.Map;
                         : 0;
         // writeSampleData blocks on old API versions, so check here to avoid calling the method.
         checkState(
-                Util.SDK_INT > 24 || presentationTimeUs >= lastSamplePresentationTimeUs,
+                Build.VERSION.SDK_INT > 24 || presentationTimeUs >= lastSamplePresentationTimeUs,
                 "Samples not in presentation order ("
                         + presentationTimeUs
                         + " < "
@@ -199,11 +204,11 @@ import java.util.Map;
                         + " < "
                         + lastSamplePresentationTimeUs
                         + ") unsupported when using negative PTS workaround");
-        bufferInfo.set(bufferInfo.offset, bufferInfo.size, presentationTimeUs, bufferInfo.flags);
+        var tempBuf = new MediaCodec.BufferInfo();
+        tempBuf.set(tempBuf.offset, bufferInfo.size, presentationTimeUs, bufferInfo.flags);
 
         try {
-            checkState(trackToken instanceof TrackTokenImpl);
-            mediaMuxer.writeSampleData(((TrackTokenImpl) trackToken).trackIndex, data, bufferInfo);
+            mediaMuxer.writeSampleData(trackToken, data, tempBuf);
         } catch (RuntimeException e) {
             throw new MuxerException(
                     "Failed to write sample for presentationTimeUs="
@@ -215,7 +220,7 @@ import java.util.Map;
     }
 
     @Override
-    public void addMetadataEntry(Metadata.Entry metadataEntry) {
+    public void addMetadataEntry(@NonNull Metadata.Entry metadataEntry) {
         if (metadataEntry instanceof Mp4LocationData) {
             mediaMuxer.setLocation(
                     ((Mp4LocationData) metadataEntry).latitude, ((Mp4LocationData) metadataEntry).longitude);
@@ -235,11 +240,9 @@ import java.util.Map;
         }
 
         if (videoDurationUs != C.TIME_UNSET && videoTrackToken != null) {
-            BufferInfo bufferInfo = new BufferInfo();
-            bufferInfo.set(
-                    /* newOffset= */ 0,
-                    /* newSize= */ 0,
+            BufferInfo bufferInfo = new BufferInfo(
                     videoDurationUs,
+                    0,
                     TransformerUtil.getMediaCodecFlags(C.BUFFER_FLAG_END_OF_STREAM));
             writeSampleData(checkNotNull(videoTrackToken), ByteBuffer.allocateDirect(0), bufferInfo);
         }
@@ -267,11 +270,11 @@ import java.util.Map;
     // Accesses MediaMuxer state via reflection to ensure that muxer resources can be released even
     // if stopping fails.
     @SuppressLint("PrivateApi")
-    private static void stopMuxer(MediaMuxer mediaMuxer) {
+    private static void stopMuxer(MediaMuxerCompat mediaMuxer) {
         try {
             mediaMuxer.stop();
         } catch (RuntimeException e) {
-            if (SDK_INT < 30) {
+            if (Build.VERSION.SDK_INT < 30) {
                 // Set the muxer state to stopped even if mediaMuxer.stop() failed so that
                 // mediaMuxer.release() doesn't attempt to stop the muxer and therefore doesn't throw the
                 // same exception without releasing its resources. This is already implemented in MediaMuxer
@@ -295,21 +298,10 @@ import java.util.Map;
     private static ImmutableList<String> getSupportedVideoSampleMimeTypes() {
         ImmutableList.Builder<String> supportedMimeTypes =
                 new ImmutableList.Builder<String>()
-                        .add(MimeTypes.VIDEO_H264, MimeTypes.VIDEO_H263, MimeTypes.VIDEO_MP4V);
-        if (SDK_INT >= 24) {
-            supportedMimeTypes.add(MimeTypes.VIDEO_H265);
-        }
-        if (SDK_INT >= 34) {
+                        .add(MimeTypes.VIDEO_H265, MimeTypes.VIDEO_H264, MimeTypes.VIDEO_H263, MimeTypes.VIDEO_MP4V);
+        if (Build.VERSION.SDK_INT >= 34) {
             supportedMimeTypes.add(MimeTypes.VIDEO_AV1);
         }
         return supportedMimeTypes.build();
-    }
-
-    private static class TrackTokenImpl implements TrackToken {
-        public final int trackIndex;
-
-        public TrackTokenImpl(int trackIndex) {
-            this.trackIndex = trackIndex;
-        }
     }
 }
